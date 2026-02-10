@@ -1,0 +1,178 @@
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../src/generated/prisma"
+  engineType = "binary"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  kode          String    @unique
+  email         String?
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  password      String?
+  role          String?   @default("USER")
+  accounts      Account[]
+  sessions      Session[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+enum MutasiType {
+  DEBET
+  KREDIT
+}
+
+enum DepositStatus {
+  ACTIVE
+  MATURED
+  WITHDRAWN
+  ROLLED_OVER
+}
+
+enum Admin1Status {
+  PROSES
+  APPROVE
+  REJECT
+}
+
+enum Admin2Status {
+  PENDING
+  PROSES
+  APPROVE
+  REJECT
+}
+
+model Investor {
+  id                 String         @id @default(cuid())
+  nama               String?
+  kode               String?
+  rekening_bank      String?
+  atas_nama_rekening String?
+  whatsapp           String?
+  email              String?
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+  mutasiRecords      MutasiRecord[] @relation("InvestorMutasiRecords")
+  deposits           Deposit[]
+
+  @@map("investors")
+}
+
+model MutasiRecord {
+  id             String       @id @default(cuid())
+  tanggal        DateTime     @map("tanggal")
+  kode           String
+  nama           String?
+  rekening_bank  String?
+  mutasi         MutasiType
+  nilai_mutasi   Decimal      @db.Decimal(15, 2)
+  saldo_akhir    Decimal      @map("saldo_akhir") @db.Decimal(15, 2)
+  keterangan     String?
+  bukti_transfer String?      @map("bukti_transfer")
+  admin1_status  Admin1Status @default(PROSES)
+  admin2_status  Admin2Status @default(PENDING)
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  investorId     String       @map("investor_id")
+  investor       Investor     @relation("InvestorMutasiRecords", fields: [investorId], references: [id], onDelete: Cascade)
+
+  @@map("mutasi_records")
+}
+
+model Breakdown {
+  id                   String   @id @default(cuid())
+  kode                 String?  @unique
+  tanggal              DateTime
+  project_pt           String?
+  keterangan           String?
+  nilai                Decimal  @db.Decimal(15, 2)
+  tempo                Int // tempo dalam hari
+  bagi_hasil           Decimal  @db.Decimal(15, 2)
+  hari                 Int? // hari = tanggal akhir bulan - tanggal input
+  bagi_hasil_per_bulan Decimal? @db.Decimal(15, 2) // (hari / tempo) * bagi_hasil
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@map("breakdowns")
+}
+
+model Cashflow {
+  id         String     @id @default(cuid())
+  tanggal    DateTime
+  keterangan String?
+  pt         String
+  mutasi     MutasiType
+  nilai      Decimal    @db.Decimal(15, 2)
+  saldo      Decimal    @db.Decimal(15, 2)
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  @@map("cashflows")
+}
+
+model Deposit {
+  id             String        @id @default(cuid())
+  investorId     String        @map("investor_id")
+  investor       Investor      @relation(fields: [investorId], references: [id], onDelete: Cascade)
+  kode           String?
+  nama           String?
+  nilai          Decimal       @db.Decimal(15, 2)
+  tanggal        DateTime
+  term_months    Int           @map("term_months")
+  jatuh_tempo    DateTime      @map("jatuh_tempo")
+  suku_bunga     Decimal       @default(0.05) @map("suku_bunga") @db.Decimal(5, 4)
+  bunga_diterima Decimal       @map("bunga_diterima") @db.Decimal(15, 2)
+  total_akhir    Decimal       @map("total_akhir") @db.Decimal(15, 2)
+  keterangan     String?
+  status         DepositStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  @@map("deposits")
+}

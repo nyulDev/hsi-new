@@ -1,0 +1,17 @@
+# Deteksi otomatis file teks dan normalisasi LF
+* text=auto
+
+# Tentukan file yang harus selalu LF
+*.js text eol=lf
+*.ts text eol=lf
+*.jsx text eol=lf
+*.tsx text eol=lf
+*.json text eol=lf
+*.prisma text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md text eol=lf
+
+# File yang harus selalu CRLF (untuk Windows)
+*.bat text eol=crlf
+*.cmd text eol=crlf
