@@ -8,7 +8,18 @@ import { MonthFilter } from "./month-filter";
 import { AddBreakdownDialog } from "./add-breakdown-dialog";
 import { ExportPdfButton } from "./export-pdf-button";
 import { Button } from "@/components/ui/button";
-import { Upload } from "lucide-react";
+import { Upload, Trash2 } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 interface RekapInvestClientProps {
   data: RekapInvest[];
@@ -41,6 +52,7 @@ export function RekapInvestClient({
   const [rowSelection, setRowSelection] = React.useState({});
   const [uploading, setUploading] = React.useState(false);
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [bulkDeleting, setBulkDeleting] = React.useState(false);
 
   const filteredData = React.useMemo(
     () =>
@@ -95,6 +107,39 @@ export function RekapInvestClient({
     }
   };
 
+  const handleBulkDelete = async () => {
+    if (selectedRows.length === 0) return;
+
+    setBulkDeleting(true);
+    try {
+      const selectedIds = selectedRows.map(
+        (index) => filteredData[parseInt(index)].id,
+      );
+
+      const response = await fetch("/api/breakdowns/bulk-delete", {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        alert(result.message);
+        window.location.reload();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      alert("Terjadi kesalahan saat menghapus data.");
+    } finally {
+      setBulkDeleting(false);
+    }
+  };
+
   return (
     <div className="">
       <div className="mb-8 px-4 py-2 bg-secondary rounded-md flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -111,7 +156,7 @@ export function RekapInvestClient({
           />
         </div>
         <div className="flex gap-2">
-          {userRole !== "USER" && (
+          {userRole === "SUPER_ADMIN" && (
             <>
               <Input
                 type="file"
@@ -137,10 +182,44 @@ export function RekapInvestClient({
             totalHSIShare={totalHSIShare}
             data={filteredData}
           />
+          {selectedRows.length > 0 && userRole !== "USER" && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="destructive"
+                  className="flex items-center gap-2"
+                  disabled={bulkDeleting}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  {bulkDeleting ? "Deleting..." : "Delete Selected"}
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Apakah Anda yakin?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Tindakan ini tidak dapat dibatalkan. Ini akan menghapus{" "}
+                    {selectedRows.length} breakdown secara permanen dan
+                    menghapus data dari server.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Batal</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleBulkDelete}
+                    disabled={bulkDeleting}
+                    className="bg-red-600 hover:bg-red-700"
+                  >
+                    {bulkDeleting ? "Menghapus..." : "Hapus"}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
           {showAddBreakdown && <AddBreakdownDialog />}
         </div>
       </div>
-      {userRole === "USER" && totalCards}
+      {totalCards}
       <DataTable
         columns={getColumns(userRole)}
         data={filteredData}

@@ -36,24 +36,24 @@ export async function POST(request: NextRequest) {
     const startOfThreeMonthsAgo = new Date(
       threeMonthsAgo.getFullYear(),
       threeMonthsAgo.getMonth(),
-      1
+      1,
     );
     const endOfThreeMonthsAgo = new Date(
       threeMonthsAgo.getFullYear(),
       threeMonthsAgo.getMonth() + 1,
-      0
+      0,
     );
 
     // Get all latest saldos for current month to calculate total
     const startOfCurrentMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      1
+      1,
     );
     const endOfCurrentMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      0
+      0,
     );
 
     const allLatestRecords = await Promise.all(
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
             select: { saldo_akhir: true },
           });
           return latestRecord ? Number(latestRecord.saldo_akhir) : 0;
-        })
+        }),
     );
 
     const totalSaldo = allLatestRecords.reduce((sum, saldo) => sum + saldo, 0);
@@ -87,8 +87,9 @@ export async function POST(request: NextRequest) {
       ? Number(modalAggregate._sum.nilai)
       : 0;
 
-    // Persen-M: modal / totalSaldo * 100 (using current totalSaldo)
-    const persenM = totalSaldo > 0 ? (modal / totalSaldo) * 100 : 0;
+    // Persen-M: modal / totalSaldo * 100, capped at 100%
+    const persenM =
+      totalSaldo > 0 ? Math.min(100, (modal / totalSaldo) * 100) : 0;
 
     // Bagi Hasil: 5% of modal, then deduct 5% admin fee
     const bagiHasil = 0.05 * modal * 0.95;
@@ -146,7 +147,7 @@ export async function POST(request: NextRequest) {
         });
 
         console.log(
-          `Kredit processed for investor ${investor.kode}: ${nilaiMutasi}`
+          `Kredit processed for investor ${investor.kode}: ${nilaiMutasi}`,
         );
       }
     }
@@ -158,7 +159,7 @@ export async function POST(request: NextRequest) {
     console.error("Error processing kredit mutations:", error);
     return NextResponse.json(
       { error: "Internal server error during kredit processing" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

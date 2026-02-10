@@ -34,12 +34,12 @@ export async function POST(request: NextRequest) {
     const startOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      1
+      1,
     );
     const endOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      0
+      0,
     );
 
     // Get all saldos using the same method as investments page (sum kredit - sum debet up to current date)
@@ -73,11 +73,11 @@ export async function POST(request: NextRequest) {
             Number(debetSum._sum.nilai_mutasi || 0);
           saldoMap.set(investor.id, saldo);
           totalSaldo += saldo;
-        })
+        }),
     );
 
     const allLatestRecords = investors.map(
-      (investor) => saldoMap.get(investor.id) || 0
+      (investor) => saldoMap.get(investor.id) || 0,
     );
 
     // Calculate modal: sum of nilai from breakdowns for current month
@@ -96,8 +96,9 @@ export async function POST(request: NextRequest) {
       ? Number(modalAggregate._sum.nilai)
       : 0;
 
-    // Persen-M: modal / totalSaldo * 100
-    const persenM = totalSaldo > 0 ? (modal / totalSaldo) * 100 : 0;
+    // Persen-M: modal / totalSaldo * 100, capped at 100%
+    const persenM =
+      totalSaldo > 0 ? Math.min(100, (modal / totalSaldo) * 100) : 0;
 
     for (let i = 0; i < investors.length; i++) {
       const investor = investors[i];
@@ -147,7 +148,7 @@ export async function POST(request: NextRequest) {
         });
 
         console.log(
-          `Debet processed for investor ${investor.kode}: ${nilaiMutasi}`
+          `Debet processed for investor ${investor.kode}: ${nilaiMutasi}`,
         );
       }
     }
@@ -159,7 +160,7 @@ export async function POST(request: NextRequest) {
     console.error("Error processing debet mutations:", error);
     return NextResponse.json(
       { error: "Internal server error during debet processing" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

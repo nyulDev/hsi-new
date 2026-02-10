@@ -25,9 +25,12 @@ export async function POST(request: NextRequest) {
     if (type === "all") {
       await processDebetMutations();
       // Wait 2 minutes before processing kredit (as per todo.md)
-      setTimeout(async () => {
-        await processKreditMutations();
-      }, 2 * 60 * 1000);
+      setTimeout(
+        async () => {
+          await processKreditMutations();
+        },
+        2 * 60 * 1000,
+      );
       return NextResponse.json({
         message: "All mutations scheduled for processing",
       });
@@ -35,13 +38,13 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(
       { error: "Invalid type. Use debet, kredit, or all" },
-      { status: 400 }
+      { status: 400 },
     );
   } catch (error) {
     console.error("Error in auto mutation:", error);
     return NextResponse.json(
       { error: "Internal server error during auto mutation" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
@@ -77,19 +80,19 @@ async function processDebetMutations() {
     const startOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      1
+      1,
     );
     const endOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      0
+      0,
     );
 
     // Get all starting saldos for the month (up to 8th or latest before)
     const endOfMonthForSaldo = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      8
+      8,
     );
 
     const allLatestRecords = await Promise.all(
@@ -123,7 +126,7 @@ async function processDebetMutations() {
           }
 
           return latestRecord ? Number(latestRecord.saldo_akhir) : 0;
-        })
+        }),
     );
 
     const totalSaldo = allLatestRecords.reduce((sum, saldo) => sum + saldo, 0);
@@ -144,8 +147,9 @@ async function processDebetMutations() {
       ? Number(modalAggregate._sum.nilai)
       : 0;
 
-    // Persen-M: modal / totalSaldo * 100
-    const persenM = totalSaldo > 0 ? (modal / totalSaldo) * 100 : 0;
+    // Persen-M: modal / totalSaldo * 100, capped at 100%
+    const persenM =
+      totalSaldo > 0 ? Math.min(100, (modal / totalSaldo) * 100) : 0;
 
     for (let i = 0; i < investors.length; i++) {
       const investor = investors[i];
@@ -180,7 +184,7 @@ async function processDebetMutations() {
         });
 
         console.log(
-          `Debet processed for investor ${investor.kode}: ${nilaiMutasi}`
+          `Debet processed for investor ${investor.kode}: ${nilaiMutasi}`,
         );
       }
     }
@@ -223,12 +227,12 @@ async function processKreditMutations() {
     const startOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth(),
-      1
+      1,
     );
     const endOfMonth = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() + 1,
-      0
+      0,
     );
 
     // Get all latest saldos to calculate total
@@ -242,7 +246,7 @@ async function processKreditMutations() {
             select: { saldo_akhir: true },
           });
           return latestRecord ? Number(latestRecord.saldo_akhir) : 0;
-        })
+        }),
     );
 
     const totalSaldo = allLatestRecords.reduce((sum, saldo) => sum + saldo, 0);
@@ -263,8 +267,16 @@ async function processKreditMutations() {
       ? Number(modalAggregate._sum.nilai)
       : 0;
 
-    // Persen-M: modal / totalSaldo * 100
-    const persenM = totalSaldo > 0 ? (modal / totalSaldo) * 100 : 0;
+    // Dana Tersedia: total deposits (following dana page)
+    const totalDanaTersedia = await prisma.deposit.aggregate({
+      _sum: {
+        nilai: true,
+      },
+    });
+    const danaTersedia = Number(totalDanaTersedia._sum.nilai || 0);
+
+    // Persen-M: modal / danaTersedia * 100
+    const persenM = danaTersedia > 0 ? (modal / danaTersedia) * 100 : 0;
 
     // Bagi Hasil: sum of bagi_hasil_per_bulan from breakdowns for current month, minus 5% admin fee
     const bagiHasilAggregate = await prisma.breakdown.aggregate({
@@ -286,10 +298,10 @@ async function processKreditMutations() {
 
     console.log(`Processing kredit for ${investors.length} investors`);
     console.log(
-      `Total saldo: ${totalSaldo}, Modal: ${modal}, Persen-M: ${persenM}`
+      `Total saldo: ${totalSaldo}, Modal: ${modal}, Persen-M: ${persenM}`,
     );
     console.log(
-      `Total bagi hasil per bulan: ${totalBagiHasilPerBulan}, Admin fee: ${adminFee}, Net bagi hasil: ${totalBagiHasil}`
+      `Total bagi hasil per bulan: ${totalBagiHasilPerBulan}, Admin fee: ${adminFee}, Net bagi hasil: ${totalBagiHasil}`,
     );
 
     for (let i = 0; i < investors.length; i++) {
@@ -305,7 +317,7 @@ async function processKreditMutations() {
       const bagiHasil = (persen / 100) * totalBagiHasil;
 
       console.log(
-        `Investor ${investor.kode}: Saldo ${saldo}, Persen ${persen}%, Bagi hasil ${bagiHasil}`
+        `Investor ${investor.kode}: Saldo ${saldo}, Persen ${persen}%, Bagi hasil ${bagiHasil}`,
       );
 
       if (bagiHasil > 0) {
@@ -343,7 +355,7 @@ async function processKreditMutations() {
         });
 
         console.log(
-          `Kredit processed for investor ${investor.kode}: ${bagiHasil}`
+          `Kredit processed for investor ${investor.kode}: ${bagiHasil}`,
         );
       }
     }

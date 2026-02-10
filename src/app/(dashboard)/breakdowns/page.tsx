@@ -179,11 +179,7 @@ const RekapInvestPage = async ({
       monthName={monthName}
       totalCards={totalCards}
       showMonthFilter={true}
-      showAddBreakdown={
-        userRole === "SUPER_ADMIN" ||
-        userRole === "ADMIN1" ||
-        userRole === "ADMIN2"
-      }
+      showAddBreakdown={userRole === "SUPER_ADMIN"}
       userRole={userRole}
       totalNilai={totalNilai}
       totalProfit={totalProfit}

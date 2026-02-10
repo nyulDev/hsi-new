@@ -20,19 +20,19 @@ export async function POST(request: NextRequest) {
     const threeMonthsAgo = new Date(
       currentDate.getFullYear(),
       currentDate.getMonth() - 3,
-      1
+      1,
     );
 
     // Get start and end of 3 months ago month
     const startOfThreeMonthsAgo = new Date(
       threeMonthsAgo.getFullYear(),
       threeMonthsAgo.getMonth(),
-      1
+      1,
     );
     const endOfThreeMonthsAgo = new Date(
       threeMonthsAgo.getFullYear(),
       threeMonthsAgo.getMonth() + 1,
-      0
+      0,
     );
 
     // Get all saldos for 3 months ago using same method as investments page
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
             Number(debetSum._sum.nilai_mutasi || 0);
           saldoMap.set(investor.id, saldo);
           totalSaldo += saldo;
-        })
+        }),
     );
 
     // Calculate Modal: total nilai from breakdowns for 3 months ago
@@ -85,8 +85,16 @@ export async function POST(request: NextRequest) {
       ? Number(modalAggregate._sum.nilai)
       : 0;
 
-    // Persen-M: modal / totalSaldo * 100
-    const persenM = totalSaldo > 0 ? (modal / totalSaldo) * 100 : 0;
+    // Dana Tersedia: total deposits (following dana page)
+    const totalDanaTersedia = await prisma.deposit.aggregate({
+      _sum: {
+        nilai: true,
+      },
+    });
+    const danaTersedia = Number(totalDanaTersedia._sum.nilai || 0);
+
+    // Persen-M: modal / danaTersedia * 100
+    const persenM = danaTersedia > 0 ? (modal / danaTersedia) * 100 : 0;
 
     for (let i = 0; i < investors.length; i++) {
       const investor = investors[i];
@@ -132,14 +140,14 @@ export async function POST(request: NextRequest) {
             saldo_akhir: newSaldo,
             keterangan: `Dana terpakai (${startOfThreeMonthsAgo.toLocaleDateString(
               "id-ID",
-              { month: "long", year: "numeric" }
+              { month: "long", year: "numeric" },
             )})`,
             investorId: investor.id,
           },
         });
 
         console.log(
-          `Dana terpakai 3 bulan lalu processed for investor ${investor.kode}: ${nilaiMutasi}`
+          `Dana terpakai 3 bulan lalu processed for investor ${investor.kode}: ${nilaiMutasi}`,
         );
       }
     }
@@ -151,7 +159,7 @@ export async function POST(request: NextRequest) {
     console.error("Error processing dana terpakai mutations:", error);
     return NextResponse.json(
       { error: "Internal server error during dana terpakai processing" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

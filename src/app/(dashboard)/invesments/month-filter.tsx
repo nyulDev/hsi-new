@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 
 const months = [
-  { name: "Semua", month: null },
+  { name: "Semua", month: "all" },
   { name: "Januari", month: 1 },
   { name: "Februari", month: 2 },
   { name: "Maret", month: 3 },
@@ -40,7 +40,7 @@ export function MonthFilter({ currentMonth }: MonthFilterProps) {
     }
   };
 
-  const currentValue = currentMonth || new Date().getMonth() + 1 + "";
+  const currentValue = currentMonth || "all";
 
   return (
     <Select value={currentValue} onValueChange={handleMonthChange}>
@@ -50,8 +50,8 @@ export function MonthFilter({ currentMonth }: MonthFilterProps) {
       <SelectContent>
         {months.map((month) => (
           <SelectItem
-            key={month.month || "null"}
-            value={month.month?.toString() || "null"}
+            key={month.month}
+            value={month.month?.toString() || "all"}
           >
             {month.name}
           </SelectItem>

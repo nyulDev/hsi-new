@@ -40,77 +40,23 @@ const getData = async (
   const saldoMap = new Map<string, number>();
   let totalSaldo = 0;
 
-  await Promise.all(
-    investors.map(async (investor) => {
-      // Get saldo for the selected month or current month, limited to 8th
-      let startOfMonth: Date;
-      let endOfMonth: Date;
-
-      if (month) {
-        const monthNum = parseInt(month);
-        const currentYear = new Date().getFullYear();
-        startOfMonth = new Date(currentYear, monthNum - 1, 1);
-        endOfMonth = new Date(currentYear, monthNum, 0);
-      } else {
-        const currentMonth = new Date();
-        startOfMonth = new Date(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth(),
-          1,
-        );
-        endOfMonth = new Date(
-          currentMonth.getFullYear(),
-          currentMonth.getMonth() + 1,
-          0,
-        );
-      }
-
-      // For current month, use current date; for past months, use end of month
-      const currentDate = new Date();
-      const isCurrentMonth =
-        startOfMonth.getMonth() === currentDate.getMonth() &&
-        startOfMonth.getFullYear() === currentDate.getFullYear();
-      const endOfMonthForSaldo = isCurrentMonth ? currentDate : endOfMonth;
-
-      const kreditSum = await prisma.mutasiRecord.aggregate({
-        where: {
-          investorId: investor.id,
-          tanggal: { lte: endOfMonthForSaldo },
-          mutasi: "KREDIT",
-        },
-        _sum: { nilai_mutasi: true },
-      });
-
-      const debetSum = await prisma.mutasiRecord.aggregate({
-        where: {
-          investorId: investor.id,
-          tanggal: { lte: endOfMonthForSaldo },
-          mutasi: "DEBET",
-        },
-        _sum: { nilai_mutasi: true },
-      });
-
-      const saldo =
-        Number(kreditSum._sum.nilai_mutasi || 0) -
-        Number(debetSum._sum.nilai_mutasi || 0);
-      saldoMap.set(investor.id, saldo);
-      totalSaldo += saldo;
-    }),
-  );
-
-  // Dana Tersedia: total saldo per bulan (sum of all investor saldos for the month)
-  const danaTersedia = totalSaldo;
-
-  // Calculate Modal: total nilai from breakdowns for selected month or current month
+  // Calculate date range for saldo calculation
   let startOfMonth: Date;
   let endOfMonth: Date;
+  let isAllTime = false;
 
-  if (month) {
+  if (month && month !== "all") {
     const monthNum = parseInt(month);
     const currentYear = new Date().getFullYear();
     startOfMonth = new Date(currentYear, monthNum - 1, 1);
     endOfMonth = new Date(currentYear, monthNum, 0);
+  } else if (month === "all") {
+    // For "all", use all time
+    startOfMonth = new Date(2000, 0, 1); // Far past date
+    endOfMonth = new Date(); // Current date
+    isAllTime = true;
   } else {
+    // Default to current month
     const currentMonth = new Date();
     startOfMonth = new Date(
       currentMonth.getFullYear(),
@@ -124,23 +70,81 @@ const getData = async (
     );
   }
 
-  const modalAggregate = await prisma.breakdown.aggregate({
-    where: {
-      tanggal: {
-        gte: startOfMonth,
-        lte: endOfMonth,
-      },
-    },
-    _sum: {
+  // For current month, use current date; for past months, use end of month
+  const currentDate = new Date();
+  const isCurrentMonth =
+    startOfMonth.getMonth() === currentDate.getMonth() &&
+    startOfMonth.getFullYear() === currentDate.getFullYear();
+  const endOfMonthForSaldo = isCurrentMonth ? currentDate : endOfMonth;
+
+  // Calculate modal from total investasi per bulan from breakdowns
+  const breakdowns = await prisma.breakdown.findMany({
+    select: {
+      tanggal: true,
       nilai: true,
     },
   });
-  const modal = modalAggregate._sum?.nilai
-    ? Number(modalAggregate._sum.nilai)
-    : 0;
 
-  // Persen-M: modal / danaTersedia * 100 (following Persen A formula from dana page)
-  const persenM = danaTersedia > 0 ? (modal / danaTersedia) * 100 : 0;
+  let filteredBreakdowns = breakdowns;
+  if (month && month !== "all") {
+    const monthNum = parseInt(month);
+    filteredBreakdowns = breakdowns.filter(
+      (d) => new Date(d.tanggal).getMonth() + 1 === monthNum,
+    );
+  } else if (!month || month === "all") {
+    // For "all" or default, use all
+    filteredBreakdowns = breakdowns;
+  }
+
+  const modalValue = filteredBreakdowns.reduce(
+    (sum, b) => sum + Number(b.nilai),
+    0,
+  );
+
+  // Get all approved mutasi records for all investors up to the end of the selected period
+  const mutasiWhereCondition: any = {
+    investorId: { in: investors.map((inv) => inv.id) },
+    admin2_status: "APPROVE",
+    tanggal: { lte: endOfMonthForSaldo },
+  };
+
+  const allMutasiRecords = await prisma.mutasiRecord.findMany({
+    where: mutasiWhereCondition,
+    select: {
+      investorId: true,
+      mutasi: true,
+      nilai_mutasi: true,
+    },
+  });
+
+  // Group by investorId and calculate saldo
+  const saldoByInvestor = new Map<string, number>();
+  for (const record of allMutasiRecords) {
+    const currentSaldo = saldoByInvestor.get(record.investorId) || 0;
+    const nilai = Number(record.nilai_mutasi);
+    if (record.mutasi === "KREDIT") {
+      saldoByInvestor.set(record.investorId, currentSaldo + nilai);
+    } else {
+      saldoByInvestor.set(record.investorId, currentSaldo - nilai);
+    }
+  }
+
+  // Set saldos for each investor
+  for (const investor of investors) {
+    const saldo = saldoByInvestor.get(investor.id) || 0;
+    saldoMap.set(investor.id, saldo);
+    totalSaldo += saldo;
+  }
+
+  // Dana Tersedia: total saldo per bulan (sum of all investor saldos for the month)
+  const danaTersedia = totalSaldo;
+
+  // Modal: total investasi per bulan from breakdowns
+  const modal = modalValue;
+
+  // Persen-M: modal / danaTersedia * 100, capped at 100%
+  const persenM =
+    danaTersedia > 0 ? Math.min(100, (modal / danaTersedia) * 100) : 0;
 
   // Bagi Hasil: 5% of modal, then deduct 5% admin fee (following dana page formula)
   const bagiHasil = 0.05 * modal * 0.95;
@@ -206,6 +210,7 @@ const InvestmentsPage = async ({
 
   return (
     <InvestmentsClient
+      key={effectiveMonth}
       data={investments}
       modal={modal}
       persenM={persenM}

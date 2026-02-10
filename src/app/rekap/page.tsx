@@ -24,6 +24,8 @@ interface Transaction {
   saldo_akhir: number;
   keterangan: string | null;
   createdAt: string;
+  admin1_status: "PROSES" | "APPROVE" | "REJECT";
+  admin2_status: "PENDING" | "PROSES" | "APPROVE" | "REJECT";
   investor: {
     id: string;
     nama: string | null;
@@ -79,10 +81,16 @@ export default function RekapPage() {
             if (t.investor?.kode) {
               const kode = t.investor.kode;
               let currentBalance = balancePerInvestor.get(kode) || 0;
-              if (t.mutasi === "KREDIT") {
-                currentBalance += t.nilai_mutasi;
-              } else if (t.mutasi === "DEBET") {
-                currentBalance -= t.nilai_mutasi;
+              // Only calculate balance for transactions approved by both admins
+              if (
+                t.admin1_status === "APPROVE" &&
+                t.admin2_status === "APPROVE"
+              ) {
+                if (t.mutasi === "KREDIT") {
+                  currentBalance += t.nilai_mutasi;
+                } else if (t.mutasi === "DEBET") {
+                  currentBalance -= t.nilai_mutasi;
+                }
               }
               balancePerInvestor.set(kode, currentBalance);
 
@@ -102,7 +110,7 @@ export default function RekapPage() {
               saldo_akhir: balancePerInvestor.get(investor.kode) || 0,
               firstTransactionDate:
                 firstTransactionDatePerInvestor.get(investor.kode) || "",
-            })
+            }),
           );
 
           setInvestors(investorSummaries);
@@ -117,39 +125,50 @@ export default function RekapPage() {
     fetchData();
   }, []);
 
-  // Calculate summary statistics
+  // Calculate summary statistics - only show if all transactions are approved by admin 2
+  const allApproved = transactions.every(
+    (t) => t.admin1_status === "APPROVE" && t.admin2_status === "APPROVE",
+  );
   const summary = {
-    transactionCount: transactions.length,
-    currentSaldo: (() => {
-      const balancePerInvestor = new Map<string, number>();
-      const sortedTransactions = [...transactions].sort((a, b) => {
-        const dateA = new Date(a.tanggal);
-        const dateB = new Date(b.tanggal);
-        if (dateA.getTime() !== dateB.getTime()) {
-          return dateA.getTime() - dateB.getTime();
-        }
-        return (
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      });
+    transactionCount: allApproved ? transactions.length : 0,
+    currentSaldo: allApproved
+      ? (() => {
+          const balancePerInvestor = new Map<string, number>();
+          const sortedTransactions = [...transactions].sort((a, b) => {
+            const dateA = new Date(a.tanggal);
+            const dateB = new Date(b.tanggal);
+            if (dateA.getTime() !== dateB.getTime()) {
+              return dateA.getTime() - dateB.getTime();
+            }
+            return (
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          });
 
-      sortedTransactions.forEach((t) => {
-        if (t.investor?.kode) {
-          const kode = t.investor.kode;
-          let currentBalance = balancePerInvestor.get(kode) || 0;
-          if (t.mutasi === "KREDIT") {
-            currentBalance += t.nilai_mutasi;
-          } else if (t.mutasi === "DEBET") {
-            currentBalance -= t.nilai_mutasi;
-          }
-          balancePerInvestor.set(kode, currentBalance);
-        }
-      });
-      return Array.from(balancePerInvestor.values()).reduce(
-        (sum, saldo) => sum + saldo,
-        0
-      );
-    })(),
+          sortedTransactions.forEach((t) => {
+            if (t.investor?.kode) {
+              const kode = t.investor.kode;
+              let currentBalance = balancePerInvestor.get(kode) || 0;
+              // Only calculate balance for transactions approved by both admins
+              if (
+                t.admin1_status === "APPROVE" &&
+                t.admin2_status === "APPROVE"
+              ) {
+                if (t.mutasi === "KREDIT") {
+                  currentBalance += t.nilai_mutasi;
+                } else if (t.mutasi === "DEBET") {
+                  currentBalance -= t.nilai_mutasi;
+                }
+              }
+              balancePerInvestor.set(kode, currentBalance);
+            }
+          });
+          return Array.from(balancePerInvestor.values()).reduce(
+            (sum, saldo) => sum + saldo,
+            0,
+          );
+        })()
+      : 0,
   };
 
   // Filter investors based on search (kode and nama only) and exclude those with saldo_akhir = 0
@@ -157,7 +176,7 @@ export default function RekapPage() {
     (investor) =>
       investor.saldo_akhir !== 0 &&
       (investor.kode?.toLowerCase().includes(searchText.toLowerCase()) ||
-        investor.nama?.toLowerCase().includes(searchText.toLowerCase()))
+        investor.nama?.toLowerCase().includes(searchText.toLowerCase())),
   );
 
   // Sort investors by first transaction date (earliest first)
@@ -172,7 +191,7 @@ export default function RekapPage() {
   const startIndex = (currentPage - 1) * itemsPerPage;
   const paginatedInvestors = sortedInvestors.slice(
     startIndex,
-    startIndex + itemsPerPage
+    startIndex + itemsPerPage,
   );
 
   // Reset to first page when search changes
