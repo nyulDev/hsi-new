@@ -21,6 +21,29 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
+    const kode = searchParams.get("kode");
+
+    if (kode) {
+      // Fetch single user by kode
+      const user = await prisma.user.findUnique({
+        where: { kode },
+        select: {
+          id: true,
+          kode: true,
+          name: true,
+          email: true,
+          role: true,
+          emailVerified: true,
+        },
+      });
+
+      if (!user) {
+        return NextResponse.json({ error: "User not found" }, { status: 404 });
+      }
+
+      return NextResponse.json({ user });
+    }
+
     const page = parseInt(searchParams.get("page") || "1", 10);
     const limit = parseInt(searchParams.get("limit") || "10", 10);
     const search = searchParams.get("search") || "";
@@ -72,7 +95,7 @@ export async function GET(request: NextRequest) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

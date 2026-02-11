@@ -20,8 +20,44 @@ import { Button } from "@/components/ui/button";
 import EditUser from "@/components/EditUser";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import AppLineChart from "@/components/AppLineChart";
+import { auth } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { prisma } from "@/lib/prisma";
 
-const SingleUserPage = () => {
+const SingleUserPage = async ({
+  params,
+}: {
+  params: Promise<{ username: string }>;
+}) => {
+  const { username } = await params;
+  const session = await auth();
+
+  if (
+    !session ||
+    !session.user ||
+    !(session.user as any).role ||
+    ((session.user as any).role !== "ADMIN" &&
+      (session.user as any).role !== "SUPER_ADMIN")
+  ) {
+    redirect("/login");
+  }
+
+  // Fetch user data directly from database
+  const user = await prisma.user.findUnique({
+    where: { kode: username },
+    select: {
+      id: true,
+      kode: true,
+      name: true,
+      email: true,
+      role: true,
+      emailVerified: true,
+    },
+  });
+
+  if (!user) {
+    redirect("/users");
+  }
   return (
     <div className="">
       <Breadcrumb>
@@ -114,7 +150,7 @@ const SingleUserPage = () => {
                 <SheetTrigger asChild>
                   <Button>Edit User</Button>
                 </SheetTrigger>
-                <EditUser />
+                <EditUser user={user} />
               </Sheet>
             </div>
             <div className="space-y-4 mt-4">

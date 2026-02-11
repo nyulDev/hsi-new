@@ -6,14 +6,59 @@ import * as bcrypt from "bcrypt-ts";
 
 const updateUserSchema = z.object({
   name: z.string().min(1),
-  email: z.string().email(),
-  role: z.enum(["USER", "ADMIN", "SUPER_ADMIN"]),
+  email: z.string().optional(),
+  kode: z.string().optional(),
+  role: z.enum(["USER", "ADMIN", "ADMIN_1", "ADMIN_2", "SUPER_ADMIN"]),
   password: z.string().optional(),
 });
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+
+    if (
+      !session ||
+      !session.user ||
+      !(session.user as any).role ||
+      ((session.user as any).role !== "ADMIN" &&
+        (session.user as any).role !== "SUPER_ADMIN")
+    ) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        kode: true,
+        role: true,
+        emailVerified: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json({ user });
+  } catch (error) {
+    console.error("Error fetching user:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 },
+    );
+  }
+}
+
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -42,7 +87,7 @@ export async function DELETE(
     if (userToDelete.role === "SUPER_ADMIN") {
       return NextResponse.json(
         { error: "Cannot delete SUPER_ADMIN users" },
-        { status: 403 }
+        { status: 403 },
       );
     }
 
@@ -57,14 +102,14 @@ export async function DELETE(
     console.error("Error deleting user:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: Promise<{ id: string }> },
 ) {
   try {
     const { id } = await params;
@@ -81,23 +126,44 @@ export async function PUT(
     }
 
     const body = await request.json();
-    const { name, email, role, password } = updateUserSchema.parse(body);
+    const { name, email, kode, role, password } = updateUserSchema.parse(body);
 
-    // Check if email is already taken by another user
-    const existingUser = await prisma.user.findFirst({
-      where: {
-        email,
-        NOT: {
-          id,
+    // Check if email is already taken by another user (only if email is provided)
+    if (email && email.trim() !== "") {
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          email: email.trim(),
+          NOT: {
+            id,
+          },
         },
-      },
-    });
+      });
 
-    if (existingUser) {
-      return NextResponse.json(
-        { error: "Email already taken" },
-        { status: 400 }
-      );
+      if (existingUser) {
+        return NextResponse.json(
+          { error: "Email already taken" },
+          { status: 400 },
+        );
+      }
+    }
+
+    // Check if kode is already taken by another user
+    if (kode && kode.trim() !== "") {
+      const existingKodeUser = await prisma.user.findFirst({
+        where: {
+          kode: kode.trim(),
+          NOT: {
+            id,
+          },
+        },
+      });
+
+      if (existingKodeUser) {
+        return NextResponse.json(
+          { error: "Kode already taken" },
+          { status: 400 },
+        );
+      }
     }
 
     const updateData: any = {
@@ -105,6 +171,10 @@ export async function PUT(
       email,
       role,
     };
+
+    if (kode && kode.trim() !== "") {
+      updateData.kode = kode.trim();
+    }
 
     if (password) {
       updateData.password = await bcrypt.hash(password, 10);
@@ -129,14 +199,14 @@ export async function PUT(
     if (error instanceof z.ZodError) {
       return NextResponse.json(
         { error: "Invalid input data", details: error.errors },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
     console.error("Error updating user:", error);
     return NextResponse.json(
       { error: "Internal server error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

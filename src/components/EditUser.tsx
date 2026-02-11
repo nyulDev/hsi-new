@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -25,9 +25,9 @@ import { Button } from "./ui/button";
 
 const formSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
-  email: z.string().email({ message: "Invalid email address!" }),
+  email: z.string().optional(),
   kode: z.string().optional(),
-  role: z.enum(["USER", "ADMIN1", "ADMIN2", "SUPER_ADMIN"]),
+  role: z.enum(["USER", "ADMIN", "ADMIN_1", "ADMIN_2", "SUPER_ADMIN"]),
   password: z.string().optional(),
 });
 
@@ -37,7 +37,7 @@ interface User {
   email: string | null;
   kode: string | null;
   role: string | null;
-  emailVerified: boolean | null;
+  emailVerified: Date | null;
 }
 
 interface EditUserProps {
@@ -47,6 +47,7 @@ interface EditUserProps {
 
 const EditUser = ({ user, onUpdate }: EditUserProps) => {
   const [isLoading, setIsLoading] = useState(false);
+  const [fetchLoading, setFetchLoading] = useState(false);
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,9 +56,48 @@ const EditUser = ({ user, onUpdate }: EditUserProps) => {
       email: user?.email || "",
       kode: user?.kode || "",
       role:
-        (user?.role as "USER" | "ADMIN1" | "ADMIN2" | "SUPER_ADMIN") || "USER",
+        (user?.role as
+          | "USER"
+          | "ADMIN"
+          | "ADMIN_1"
+          | "ADMIN_2"
+          | "SUPER_ADMIN") || "USER",
     },
   });
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const fetchUserDetails = async () => {
+      setFetchLoading(true);
+      try {
+        const response = await fetch(`/api/users/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          form.reset({
+            name: data.user.name || "",
+            email: data.user.email || "",
+            kode: data.user.kode || "",
+            role:
+              (data.user.role as
+                | "USER"
+                | "ADMIN"
+                | "ADMIN_1"
+                | "ADMIN_2"
+                | "SUPER_ADMIN") || "USER",
+          });
+        } else {
+          console.error("Failed to fetch user details");
+        }
+      } catch (error) {
+        console.error("Error fetching user details:", error);
+      } finally {
+        setFetchLoading(false);
+      }
+    };
+
+    fetchUserDetails();
+  }, [user?.id, form]);
 
   const onSubmit = async (values: z.infer<typeof formSchema>) => {
     if (!user) return;
@@ -72,13 +112,16 @@ const EditUser = ({ user, onUpdate }: EditUserProps) => {
       });
 
       if (!response.ok) {
-        throw new Error("Failed to update user");
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(
+          `Failed to update user: ${response.status} ${response.statusText} - ${errorData.error || "Unknown error"}`,
+        );
       }
 
       alert("User updated successfully");
       onUpdate?.();
     } catch (error) {
-      alert("Failed to update user");
+      alert(`Failed to update user: ${(error as Error).message}`);
       console.error("Error updating user:", error);
     } finally {
       setIsLoading(false);
@@ -146,6 +189,8 @@ const EditUser = ({ user, onUpdate }: EditUserProps) => {
                   <SelectContent>
                     <SelectItem value="USER">User</SelectItem>
                     <SelectItem value="ADMIN">Admin</SelectItem>
+                    <SelectItem value="ADMIN_1">Admin 1</SelectItem>
+                    <SelectItem value="ADMIN_2">Admin 2</SelectItem>
                     <SelectItem value="SUPER_ADMIN">Super Admin</SelectItem>
                   </SelectContent>
                 </Select>
