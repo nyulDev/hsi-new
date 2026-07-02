@@ -16,6 +16,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 const HistoryPage = () => {
   const { data: session, status } = useSession();
@@ -39,6 +46,9 @@ const HistoryPage = () => {
   const [approvingRecordId, setApprovingRecordId] = useState<string | null>(
     null,
   );
+  const [actionDialogOpen, setActionDialogOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState("");
+  const [actionType, setActionType] = useState<"DEBET" | "KREDIT" | "DANA_TERPAKAI" | "">("");
 
   const fetchData = async () => {
     console.time("fetchData");
@@ -219,86 +229,37 @@ const HistoryPage = () => {
           {(userRole === "SUPER_ADMIN" || userRole === "ADMIN1") && (
             <>
               <Button
-                onClick={async () => {
-                  if (
-                    confirm(
-                      "Are you sure you want to process an auto debit of Used Funds for all investors?",
-                    )
-                  ) {
-                    try {
-                      const res = await fetch("/api/history/process-debet", {
-                        method: "POST",
-                      });
-                      if (res.ok) {
-                        alert(
-                          "Auto dana terpakai/bulan processed successfully",
-                        );
-                        fetchData();
-                      } else {
-                        alert("Failed to process auto dana terpakai/bulan");
-                      }
-                    } catch (error) {
-                      console.error("Error processing auto debit:", error);
-                      alert("Error processing auto debit");
-                    }
-                  }
+                onClick={() => {
+                  const now = new Date();
+                  const year = now.getFullYear();
+                  const month = String(now.getMonth() + 1).padStart(2, "0");
+                  setSelectedMonth(`${year}-${month}`);
+                  setActionType("DEBET");
+                  setActionDialogOpen(true);
                 }}
               >
                 Dana Terpakai -
               </Button>
               <Button
-                onClick={async () => {
-                  if (
-                    confirm(
-                      "Are you sure you want to process automatic Profit Sharing for all investors?",
-                    )
-                  ) {
-                    try {
-                      const res = await fetch("/api/history/process-kredit", {
-                        method: "POST",
-                      });
-                      if (res.ok) {
-                        alert("Auto kredit processed successfully");
-                        fetchData();
-                      } else {
-                        alert("Failed to process auto kredit");
-                      }
-                    } catch (error) {
-                      console.error("Error processing auto kredit:", error);
-                      alert("Error processing auto kredit");
-                    }
-                  }
+                onClick={() => {
+                  const now = new Date();
+                  const year = now.getFullYear();
+                  const month = String(now.getMonth() + 1).padStart(2, "0");
+                  setSelectedMonth(`${year}-${month}`);
+                  setActionType("KREDIT");
+                  setActionDialogOpen(true);
                 }}
               >
                 Profit Sharing
               </Button>
               <Button
-                onClick={async () => {
-                  if (
-                    confirm(
-                      "Are you sure you want to process auto Credit Used Funds for all investors?",
-                    )
-                  ) {
-                    try {
-                      const res = await fetch(
-                        "/api/history/process-dana-terpakai",
-                        {
-                          method: "POST",
-                        },
-                      );
-                      if (res.ok) {
-                        alert(
-                          "Dana terpakai jatuh tempo processed successfully",
-                        );
-                        fetchData();
-                      } else {
-                        alert("Failed to process dana terpakai jatuh tempo");
-                      }
-                    } catch (error) {
-                      console.error("Error processing dana terpakai:", error);
-                      alert("Error processing dana terpakai jatuh tempo");
-                    }
-                  }
+                onClick={() => {
+                  const now = new Date();
+                  const year = now.getFullYear();
+                  const month = String(now.getMonth() + 1).padStart(2, "0");
+                  setSelectedMonth(`${year}-${month}`);
+                  setActionType("DANA_TERPAKAI");
+                  setActionDialogOpen(true);
                 }}
               >
                 Dana Terpakai +
@@ -339,6 +300,70 @@ const HistoryPage = () => {
         }}
         onSuccess={handleSuccess}
       />
+      <Dialog open={actionDialogOpen} onOpenChange={setActionDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {actionType === "DEBET" && "Proses Auto Debet (Dana Terpakai -)"}
+              {actionType === "KREDIT" && "Proses Profit Sharing"}
+              {actionType === "DANA_TERPAKAI" && "Proses Auto Kredit (Dana Terpakai +)"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="block text-sm font-medium mb-2">Pilih Bulan & Tahun</label>
+            <Input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActionDialogOpen(false)}>
+              Batal
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!selectedMonth) return;
+                const [year, month] = selectedMonth.split("-");
+                // month is 1-indexed string, we need 0-indexed for backend
+                const monthIndex = parseInt(month, 10) - 1;
+                
+                try {
+                  let url = "";
+                  if (actionType === "DEBET") url = "/api/history/process-debet";
+                  else if (actionType === "KREDIT") url = "/api/history/process-kredit";
+                  else if (actionType === "DANA_TERPAKAI") url = "/api/history/process-dana-terpakai";
+
+                  if (!url) return;
+
+                  const res = await fetch(url, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      year: parseInt(year, 10),
+                      month: monthIndex,
+                    }),
+                  });
+                  if (res.ok) {
+                    alert("Proses berhasil");
+                    fetchData();
+                    setActionDialogOpen(false);
+                  } else {
+                    alert("Proses gagal");
+                  }
+                } catch (error) {
+                  console.error("Error processing:", error);
+                  alert("Error saat memproses data");
+                }
+              }}
+            >
+              Proses
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

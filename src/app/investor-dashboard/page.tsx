@@ -155,7 +155,8 @@ export default function InvestorDashboard() {
                 {new Intl.NumberFormat("id-ID", {
                   style: "currency",
                   currency: "IDR",
-                }).format(data.summary.currentSaldo)}
+                  maximumFractionDigits: 0,
+                }).format(Math.round(data.summary.currentSaldo))}
               </div>
             </CardContent>
           </Card>

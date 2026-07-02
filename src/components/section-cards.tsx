@@ -403,7 +403,7 @@ export function SectionCards() {
           <CardHeader>
             <CardDescription>Saldo Terkini</CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {new Intl.NumberFormat("id-ID").format(currentSaldo)}
+              {new Intl.NumberFormat("id-ID", { maximumFractionDigits: 0 }).format(Math.round(currentSaldo))}
             </CardTitle>
             <CardAction>
               <Wallet className="h-4 w-4 text-muted-foreground" />

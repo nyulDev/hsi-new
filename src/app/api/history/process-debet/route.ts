@@ -5,6 +5,13 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
+    let requestBody: any = {};
+    try {
+      requestBody = await request.json();
+    } catch (e) {
+      // Ignored, no body provided
+    }
+
     const investors = await prisma.investor.findMany({
       select: {
         id: true,
@@ -30,84 +37,77 @@ export async function POST(request: NextRequest) {
       "Desember",
     ];
 
-    // Get current month start and end
-    const startOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth(),
-      1,
-    );
-    const endOfMonth = new Date(
-      currentDate.getFullYear(),
-      currentDate.getMonth() + 1,
-      0,
-    );
+    // ── Ikuti logika investments page ──────────────────────────────────────
+    // Investments page menggunakan tanggal 1-8 bulan berjalan (current month)
+    // dan filter admin2_status = "APPROVE"
+    const currentYear = requestBody.year !== undefined ? Number(requestBody.year) : currentDate.getFullYear();
+    const currentMonth = requestBody.month !== undefined ? Number(requestBody.month) : currentDate.getMonth(); // 0-indexed
 
-    // Fetch all kredit sums up to currentDate for all investors
-    const groupedKredit = await prisma.mutasiRecord.groupBy({
-      by: ["investorId"],
+    const startDate = new Date(currentYear, currentMonth, 1, 0, 0, 0);
+    const endDate = new Date(currentYear, currentMonth, 8, 23, 59, 59);
+
+    // Ambil semua transaksi yang APPROVE dalam rentang 1-8 bulan berjalan
+    const allTransactions = await prisma.mutasiRecord.findMany({
       where: {
-        tanggal: { lte: currentDate },
-        mutasi: "KREDIT",
+        admin2_status: "APPROVE",
+        tanggal: {
+          gte: startDate,
+          lte: endDate,
+        },
       },
-      _sum: { nilai_mutasi: true },
+      orderBy: [
+        { tanggal: "asc" },
+        { id: "asc" },
+      ],
+      select: {
+        investorId: true,
+        saldo_akhir: true,
+      },
     });
 
-    // Fetch all debet sums up to currentDate for all investors
-    const groupedDebet = await prisma.mutasiRecord.groupBy({
-      by: ["investorId"],
-      where: {
-        tanggal: { lte: currentDate },
-        mutasi: "DEBET",
-      },
-      _sum: { nilai_mutasi: true },
-    });
+    // Ambil saldo_akhir transaksi terakhir per investor (persis seperti investments page)
+    const transactionsByInvestor = new Map<string, number>();
+    for (const transaction of allTransactions) {
+      // Karena diurutkan asc, yang terakhir akan menimpa yang sebelumnya
+      transactionsByInvestor.set(
+        transaction.investorId,
+        Number(transaction.saldo_akhir),
+      );
+    }
 
-    const kreditMap = new Map(
-      groupedKredit.map((g) => [g.investorId, Number(g._sum.nilai_mutasi || 0)]),
-    );
-    const debetMap = new Map(
-      groupedDebet.map((g) => [g.investorId, Number(g._sum.nilai_mutasi || 0)]),
-    );
-
-    // Get all saldos using the same method as investments page (sum kredit - sum debet up to current date)
     const saldoMap = new Map<string, number>();
     let totalSaldo = 0;
 
-    investors
-      .filter((investor) => investor.kode)
-      .forEach((investor) => {
-        const kredit = kreditMap.get(investor.id) || 0;
-        const debet = debetMap.get(investor.id) || 0;
-        const saldo = kredit - debet;
-        saldoMap.set(investor.id, saldo);
-        totalSaldo += saldo;
-      });
+    for (const investor of investors) {
+      if (!investor.kode) continue;
+      const saldo = transactionsByInvestor.get(investor.id) ?? 0;
+      saldoMap.set(investor.id, saldo);
+      totalSaldo += saldo;
+    }
 
-    const allLatestRecords = investors.map(
-      (investor) => saldoMap.get(investor.id) || 0,
-    );
+    console.log("totalSaldo (from investments logic):", totalSaldo);
 
-    // Calculate modal: sum of nilai from breakdowns for current month
-    const modalAggregate = await prisma.breakdown.aggregate({
-      where: {
-        tanggal: {
-          gte: startOfMonth,
-          lte: endOfMonth,
-        },
-      },
-      _sum: {
-        nilai: true,
-      },
+    // ── Modal: gunakan filter month+year seperti investments page ──────
+    // PENTING: jangan pakai prisma gte/lte untuk modal karena timezone UTC+7
+    // menyebabkan tanggal akhir bulan (misal 30 Juni lokal = 29 Juni 17:00 UTC)
+    // tidak ikut terhitung. Investments page memakai JS getMonth()/getFullYear()
+    const allBreakdowns = await prisma.breakdown.findMany({
+      select: { tanggal: true, nilai: true },
     });
-    const modal = modalAggregate._sum?.nilai
-      ? Number(modalAggregate._sum.nilai)
-      : 0;
+    const filteredBreakdowns = allBreakdowns.filter((b) => {
+      const d = new Date(b.tanggal);
+      // Gunakan waktu lokal (sama persis dengan investments page)
+      return d.getMonth() + 1 === currentMonth + 1 && d.getFullYear() === currentYear;
+    });
+    const modal = filteredBreakdowns.reduce((sum, b) => sum + Number(b.nilai), 0);
 
-    // Persen-M: modal / totalSaldo * 100, capped at 100%
+    // persenM persis seperti investments page
     const persenM =
       totalSaldo > 0 ? Math.min(100, (modal / totalSaldo) * 100) : 0;
 
-    // Fetch the absolute latest mutasiRecord for all investors in a single query to compute the new saldo_akhir
+    console.log("Calculations:", { modal, totalSaldo, persenM });
+
+    // ── Ambil saldo_akhir terbaru per investor untuk menghitung saldo_akhir baru ──
     const latestRecords = await prisma.mutasiRecord.findMany({
       distinct: ["investorId"],
       orderBy: [
@@ -129,17 +129,16 @@ export async function POST(request: NextRequest) {
 
     const mutationsToCreate: any[] = [];
 
-    for (let i = 0; i < investors.length; i++) {
-      const investor = investors[i];
+    for (const investor of investors) {
       if (!investor.kode) continue;
 
-      const saldo = allLatestRecords[i];
+      const saldo = saldoMap.get(investor.id) ?? 0;
 
-      // Calculate dana_terpakai: saldo * (persenM / 100)
+      // dana_terpakai = saldo × (persenM / 100), persis investments page
       const dana_terpakai = saldo * (persenM / 100);
-
-      // nilai_mutasi for debet: dana_terpakai
       const nilaiMutasi = dana_terpakai;
+
+      console.log(`Investor ${investor.kode}: saldo=${saldo}, dana_terpakai=${dana_terpakai}`);
 
       if (nilaiMutasi > 0) {
         const previousSaldo = latestSaldoMap.get(investor.id) || 0;
@@ -153,15 +152,11 @@ export async function POST(request: NextRequest) {
           mutasi: "DEBET",
           nilai_mutasi: nilaiMutasi,
           saldo_akhir: newSaldo,
-          keterangan: `Dana terpakai ${monthNames[currentDate.getMonth()]}`,
+          keterangan: `Dana terpakai ${monthNames[currentMonth]}`,
           investorId: investor.id,
           admin1_status: "APPROVE",
           admin2_status: "APPROVE",
         });
-
-        console.log(
-          `Debet calculated for investor ${investor.kode}: ${nilaiMutasi}`,
-        );
       }
     }
 
@@ -169,7 +164,9 @@ export async function POST(request: NextRequest) {
       await prisma.mutasiRecord.createMany({
         data: mutationsToCreate,
       });
-      console.log(`Successfully batch inserted ${mutationsToCreate.length} debet mutations.`);
+      console.log(
+        `Successfully batch inserted ${mutationsToCreate.length} debet mutations.`,
+      );
     }
 
     return NextResponse.json({
