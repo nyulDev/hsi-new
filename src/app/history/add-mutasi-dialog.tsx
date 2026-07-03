@@ -49,7 +49,7 @@ const formSchema = z.object({
       required_error: "Nilai mutasi wajib diisi",
       invalid_type_error: "Nilai mutasi harus berupa angka",
     })
-    .min(1, "Nilai mutasi harus lebih dari 0"),
+    .min(0, "Nilai mutasi tidak boleh negatif"),
   keterangan: z.string().optional(),
 });
 
@@ -351,8 +351,8 @@ export function AddMutasiDialog({
 
   const onSubmit = async (data: FormData) => {
     // Validasi input
-    if (data.nilai_mutasi <= 0) {
-      setInputError("Nilai mutasi harus lebih dari 0");
+    if (data.nilai_mutasi < 0) {
+      setInputError("Nilai mutasi tidak boleh negatif");
       return;
     }
 
@@ -679,7 +679,7 @@ export function AddMutasiDialog({
                 type="text"
                 inputMode="numeric"
                 placeholder="0"
-                value={nilaiMutasi > 0 ? nilaiMutasi : ""}
+                value={nilaiMutasi === 0 ? "0" : nilaiMutasi || ""}
                 onChange={handleNilaiMutasiChange}
                 className="pl-10"
               />

@@ -60,11 +60,15 @@ export default function RekapPage() {
     const fetchData = async () => {
       try {
         const investorsRes = await fetch("/api/investors");
-        const transactionsRes = await fetch("/api/history");
+        const transactionsRes = await fetch("/api/history?limit=1000000");
 
         if (investorsRes.ok && transactionsRes.ok) {
           const investorsData = await investorsRes.json();
-          const transactionsData = await transactionsRes.json();
+          const transactionsJson = await transactionsRes.json();
+          // Handle both old array response and new paginated response
+          const transactionsData: Transaction[] = Array.isArray(transactionsJson)
+            ? transactionsJson
+            : transactionsJson.data ?? [];
           setTransactions(transactionsData);
 
           const saldoPerInvestor = new Map<string, number>();
