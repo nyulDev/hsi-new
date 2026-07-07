@@ -132,7 +132,7 @@ export async function POST(request: NextRequest) {
           ? Number(lastTransaction.saldo_akhir)
           : 0;
 
-        const newSaldo = previousSaldo + nilaiMutasi; // KREDIT: add to saldo
+        const newSaldo = previousSaldo; // Saldo tidak langsung bertambah karena belum di-approve
 
         await prisma.mutasiRecord.create({
           data: {

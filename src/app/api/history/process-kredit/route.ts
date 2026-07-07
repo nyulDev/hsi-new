@@ -145,7 +145,7 @@ export async function POST(request: NextRequest) {
       if (nilaiMutasi > 0) {
         // Gunakan saldo_akhir terbaru (keseluruhan) sebagai dasar newSaldo
         const previousSaldo = latestSaldoMap.get(investor.id) || 0;
-        const newSaldo = previousSaldo + nilaiMutasi;
+        const newSaldo = previousSaldo; // Saldo tidak langsung bertambah karena belum di-approve
 
         mutationsToCreate.push({
           tanggal: threeMonthsLater,

@@ -14,6 +14,7 @@ import { Trash2, ArrowRightLeft } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import React from "react";
 import { MonthFilter } from "./month-filter";
+import { ExportPdfButton } from "./export-pdf-button";
 
 interface InvestmentsClientProps {
   data: Investment[];
@@ -118,7 +119,20 @@ export function InvestmentsClient({
             </Button>
           )}
         </div>
-        <AddInvesmentDialog />
+        <div className="flex items-center gap-2">
+          <ExportPdfButton
+            monthName={monthName}
+            data={filteredData}
+            danaTersedia={danaTersedia}
+            modal={modal}
+            persenM={persenM}
+            bagiHasil={bagiHasil}
+            persenB={persenB}
+            adminFee={adminFee}
+            sisaDana={sisaDana}
+          />
+          <AddInvesmentDialog />
+        </div>
       </div>
 
       {/* Single row with all 6 cards */}
